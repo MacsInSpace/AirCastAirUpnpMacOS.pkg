@@ -86,8 +86,8 @@ EOF
 #
 # Start services
 #
-/bin/launchctl unload /Library/LaunchAgents/com.aircast-osx-multi.plist > /dev/null 2>&1
-/bin/launchctl unload /Library/LaunchAgents/com.airupnp-osx-multi.plist > /dev/null 2>&1
+/bin/launchctl load /Library/LaunchAgents/com.aircast-osx-multi.plist > /dev/null 2>&1
+/bin/launchctl load /Library/LaunchAgents/com.airupnp-osx-multi.plist > /dev/null 2>&1
 
 #
 # Check for permission to run exe in Security SIP and "allow"
