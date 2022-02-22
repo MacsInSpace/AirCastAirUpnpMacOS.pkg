@@ -18,8 +18,8 @@ airupnpurl="https://github.com/philippe44/AirConnect/raw/master/bin/airupnp-osx-
 #
 # Stop services if exist (without check)
 #
-/bin/launchctl unload /Library/LaunchAgents/com.aircast-osx-multi.plist > /dev/null 2>&1
-/bin/launchctl unload /Library/LaunchAgents/com.airupnp-osx-multi.plist > /dev/null 2>&1
+/bin/launchctl load /Library/LaunchAgents/com.aircast-osx-multi.plist > /dev/null 2>&1
+/bin/launchctl load /Library/LaunchAgents/com.airupnp-osx-multi.plist > /dev/null 2>&1
 
 #
 # Set executables to executable
