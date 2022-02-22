@@ -8,3 +8,4 @@ It includes the current version however will try to get the latest at install ti
 The source, btw, is: 
 https://github.com/philippe44/AirConnect/
 
+Brilliant work
