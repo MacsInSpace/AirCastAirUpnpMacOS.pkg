@@ -8,18 +8,18 @@
 ## https://github.com/philippe44/AirConnect/raw/master/bin/airupnp-osx-multi
 
 #
+# Stop services if exist (without check)
+#
+/bin/launchctl load /Library/LaunchAgents/com.aircast-osx-multi.plist > /dev/null 2>&1
+/bin/launchctl load /Library/LaunchAgents/com.airupnp-osx-multi.plist > /dev/null 2>&1
+
+#
 # Get latest executables
 aircasturl="https://github.com/philippe44/AirConnect/raw/master/bin/aircast-osx-multi"
 airupnpurl="https://github.com/philippe44/AirConnect/raw/master/bin/airupnp-osx-multi"
 
 (cd /usr/local/bin && curl -O aircasturl)
 (cd /usr/local/bin && curl -O airupnpurl)
-
-#
-# Stop services if exist (without check)
-#
-/bin/launchctl load /Library/LaunchAgents/com.aircast-osx-multi.plist > /dev/null 2>&1
-/bin/launchctl load /Library/LaunchAgents/com.airupnp-osx-multi.plist > /dev/null 2>&1
 
 #
 # Set executables to executable
