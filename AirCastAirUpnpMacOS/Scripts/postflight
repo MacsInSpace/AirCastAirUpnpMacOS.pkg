@@ -7,19 +7,32 @@
 ## https://github.com/philippe44/AirConnect/raw/master/bin/aircast-osx-multi
 ## https://github.com/philippe44/AirConnect/raw/master/bin/airupnp-osx-multi
 
+loggedInUser=$( stat -f%Su /dev/console )
+
 #
 # Stop services if exist (without check)
 #
-/bin/launchctl load /Library/LaunchAgents/com.aircast-osx-multi.plist > /dev/null 2>&1
-/bin/launchctl load /Library/LaunchAgents/com.airupnp-osx-multi.plist > /dev/null 2>&1
+sudo -u $loggedInUser launchctl unload -w /Library/LaunchAgents/com.aircast-osx-multi.plist 2> /dev/null
+sudo -u $loggedInUser launchctl unload -w /Library/LaunchAgents/com.airupnp-osx-multi.plist 2> /dev/null
 
 #
 # Get latest executables
+#
 aircasturl="https://github.com/philippe44/AirConnect/raw/master/bin/aircast-osx-multi"
 airupnpurl="https://github.com/philippe44/AirConnect/raw/master/bin/airupnp-osx-multi"
 
-(cd /usr/local/bin && curl -O aircasturl)
-(cd /usr/local/bin && curl -O airupnpurl)
+(cd /private/var/temp && curl -L -O $aircasturl)
+(cd /private/var/temp && curl -L -O $airupnpurl)
+
+
+if [ ! -d "/usr/local/bin" ] 
+then
+	mkdir -p -m 775 /usr/local/bin
+	echo "/usr/local/bin does not exist. creating it..."
+fi
+
+cp /private/var/temp/aircast-osx-multi /usr/local/bin 
+cp /private/var/temp/aircast-osx-multi /usr/local/bin 
 
 #
 # Set executables to executable
@@ -37,64 +50,16 @@ chmod 755 /var/log/aircast.log
 chmod 755 /var/log/airupnp.log
 
 #
-# Create Launch Agent plists
-#
-cat << EOF > /Library/LaunchAgents/com.aircast-osx-multi.plist
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>KeepAlive</key>
-	<true/>
-	<key>Label</key>
-	<string>com.aircast-osx-multi.plist</string>
-	<key>ProgramArguments</key>
-	<array>
-		<string>/usr/local/bin/aircast-osx-multi</string>
-		<string>-Z</string>
-		<string>-f</string>
-		<string>/var/log/aircast.log</string>
-	</array>
-	<key>RunAtLoad</key>
-	<true/>
-</dict>
-</plist>
-EOF
-
-cat << EOF > /Library/LaunchAgents/com.airupnp-osx-multi.plist
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>KeepAlive</key>
-	<true/>
-	<key>Label</key>
-	<string>com.airupnp-osx-multi</string>
-	<key>ProgramArguments</key>
-	<array>
-		<string>/usr/local/bin/airupnp-osx-multi</string>
-		<string>-Z</string>
-		<string>-f</string>
-		<string>/var/log/airupnp.log</string>
-	</array>
-	<key>RunAtLoad</key>
-	<true/>
-</dict>
-</plist>
-EOF
-
-#
 # Start services
 #
-/bin/launchctl load /Library/LaunchAgents/com.aircast-osx-multi.plist > /dev/null 2>&1
-/bin/launchctl load /Library/LaunchAgents/com.airupnp-osx-multi.plist > /dev/null 2>&1
+sudo -u $loggedInUser launchctl load -w /Library/LaunchAgents/com.aircast-osx-multi.plist
+sudo -u $loggedInUser launchctl load -w /Library/LaunchAgents/com.airupnp-osx-multi.plist
 
 #
-# Check for permission to run exe in Security SIP and "allow"
+# Check for permission to run exe in Security SIP and "allow" ?
 #
-open -b com.apple.systempreferences /System/Library/PreferencePanes/Security.prefPane
-
-open x-apple.systempreferences:com.apple.preference.security?General
+#open -b com.apple.systempreferences /System/Library/PreferencePanes/Security.prefPane
+#open x-apple.systempreferences:com.apple.preference.security?General
 
 exit 0		## Success
 exit 1		## Failure
