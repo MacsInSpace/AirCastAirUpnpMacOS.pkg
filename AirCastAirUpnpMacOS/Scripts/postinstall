@@ -1,0 +1,129 @@
+#!/bin/sh
+## postinstall
+
+pathToScript=$0
+pathToPackage=$1
+targetLocation=$2
+targetVolume=$3
+
+
+#!/bin/sh
+## postflight
+##
+## https://github.com/philippe44/AirConnect
+##
+## Installs from: 
+## https://github.com/philippe44/AirConnect/raw/master/bin/aircast-osx-multi
+## https://github.com/philippe44/AirConnect/raw/master/bin/airupnp-osx-multi
+
+function with_backoff {
+  local max_attempts=${ATTEMPTS-5}
+  local timeout=${TIMEOUT-1}
+  local attempt=1
+  local exitCode=0
+
+  while (( $attempt < $max_attempts ))
+  do
+    if "$@"
+    then
+      return 0
+    else
+      exitCode=$?
+    fi
+
+    echo "Failure! Retrying in $timeout.." 1>&2
+    sleep $timeout
+    attempt=$(( attempt + 1 ))
+    timeout=$(( timeout * 2 ))
+  done
+
+  if [[ $exitCode != 0 ]]
+  then
+    echo "You've failed me for the last time! ($@)" 1>&2
+  fi
+
+  return $exitCode
+}
+
+#
+# Get current logged in user
+#
+loggedInUser=$(/bin/ls -l /dev/console | /usr/bin/awk '{ print $3 }')
+
+#
+# Stop services if exist (without check)
+#
+echo "Quietly stopping service if loaded...."
+sudo -u $loggedInUser launchctl unload -w /Library/LaunchAgents/com.aircast-osx-multi.plist
+sudo -u $loggedInUser launchctl unload -w /Library/LaunchAgents/com.airupnp-osx-multi.plist
+echo "Stopped service if loaded."
+
+#
+# Get latest executables
+#
+echo "Attempting to download latest executables from GitHub to tmp...."
+
+cd /private/var/tmp 
+aircasturl="https://github.com/philippe44/AirConnect/raw/master/bin/aircast-osx-multi"
+airupnpurl="https://github.com/philippe44/AirConnect/raw/master/bin/airupnp-osx-multi"
+( with_backoff curl -L -O $aircasturl &&  with_backoff curl -L -O $airupnpurl)
+
+
+#
+# make /usr/local/bin if not already there
+#
+echo "Checking for /usr/local/bin folder and creating if not found...."
+if [ ! -d "/usr/local/bin" ] 
+then
+	echo "Folder not found. Creating /usr/local/bin folder...."
+	mkdir -p -m 775 /usr/local/bin
+	echo "Created /usr/local/bin...."
+fi
+
+#
+# Copying downloaded executables to /usr/local/bin if they downloaded ok.
+#
+if [ -f "/private/var/tmp/aircast-osx-multi" ] 
+then
+	echo "Copying downloaded executables to /usr/local/bin folder...."
+	cp /private/var/tmp/aircast-osx-multi /usr/local/bin 
+	cp /private/var/tmp/aircast-osx-multi /usr/local/bin 
+	echo "Copied downloaded executables to /usr/local/bin folder."
+fi
+
+#
+# Set executables to executable
+#
+echo "Setting executables to executable...."
+/bin/chmod +x "/usr/local/bin/aircast-osx-multi"
+/bin/chmod +x "/usr/local/bin/airupnp-osx-multi"
+echo "Done."
+
+#
+# Create log files and set permissions.
+#
+if [ ! -f "/var/log/aircast.log" ] 
+then
+	touch /var/log/aircast.log
+	touch /var/log/airupnp.log
+	chmod 755 /var/log/aircast.log
+	chmod 755 /var/log/airupnp.log
+fi
+
+echo "START OF NEW INSTALL LOG" >> /var/log/aircast.log
+echo "START OF NEW INSTALL LOG" >> /var/log/airupnp.log
+
+#
+# Start services
+#
+sudo -u $loggedInUser launchctl load -w /Library/LaunchAgents/com.aircast-osx-multi.plist
+sudo -u $loggedInUser launchctl load -w /Library/LaunchAgents/com.airupnp-osx-multi.plist
+
+#
+# Check for permission to run exe in Security SIP and "allow" ?
+#
+#open -b com.apple.systempreferences /System/Library/PreferencePanes/Security.prefPane
+#open x-apple.systempreferences:com.apple.preference.security?General
+
+exit 0		## Success
+exit 1		## Failure
