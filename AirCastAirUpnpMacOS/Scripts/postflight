@@ -31,8 +31,11 @@ then
 	echo "/usr/local/bin does not exist. creating it..."
 fi
 
-cp /private/var/temp/aircast-osx-multi /usr/local/bin 
-cp /private/var/temp/aircast-osx-multi /usr/local/bin 
+if [ -f "/private/var/temp/aircast-osx-multi" ] 
+then
+	mv /private/var/temp/aircast-osx-multi /usr/local/bin 
+	mv /private/var/temp/aircast-osx-multi /usr/local/bin 
+fi
 
 #
 # Set executables to executable
@@ -43,11 +46,13 @@ cp /private/var/temp/aircast-osx-multi /usr/local/bin
 #
 # Create log files and set permissions.
 #
-touch /var/log/aircast.log
-touch /var/log/airupnp.log
-
-chmod 755 /var/log/aircast.log
-chmod 755 /var/log/airupnp.log
+if [ ! -f "/var/log/aircast.log" ] 
+then
+	touch /var/log/aircast.log
+	touch /var/log/airupnp.log
+	chmod 755 /var/log/aircast.log
+	chmod 755 /var/log/airupnp.log
+fi
 
 #
 # Start services
