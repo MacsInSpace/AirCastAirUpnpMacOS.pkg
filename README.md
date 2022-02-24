@@ -17,4 +17,4 @@ https://github.com/philippe44/AirConnect/issues/
 For MacOS install, run on load, or run on install issues only, add them here.
 Launchctl etc... 
 
-[img]https://i.imgur.com/w08GG4a.png[/img]
+<a href="https://imgur.com/w08GG4a"><img src="https://i.imgur.com/w08GG4a.png" title="source: imgur.com" /></a>
