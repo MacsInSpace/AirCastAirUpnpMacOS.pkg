@@ -9,7 +9,7 @@ The source, btw, is:
 https://github.com/philippe44/AirConnect/
 
 For software issues, head to:
-https://github.com/philippe44/AirConnect/issues
+https://github.com/philippe44/AirConnect/issues/
 
 For install, run on load, or run on install issues, add them here.
 
