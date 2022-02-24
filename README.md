@@ -5,8 +5,8 @@ Package to cast MacOS system audio to Chromecast natively.
 
 It includes the current version however will try to get the latest at install time from the source.
 
-Available here:
-https://github.com/MacsInSpace/AirCastAirUpnpMacOS.pkg/releases
+Available on the releases page here:
+https://github.com/MacsInSpace/AirCastAirUpnpMacOS.pkg/releases/download/chromecast/AirCastAirUpnpMacOS.pkg
 
 The source, btw, is: 
 https://github.com/philippe44/AirConnect/
