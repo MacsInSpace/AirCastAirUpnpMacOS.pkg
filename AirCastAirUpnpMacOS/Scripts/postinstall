@@ -77,7 +77,8 @@ if [ ! -d "/usr/local/bin" ]
 then
 	echo "Folder not found. Creating /usr/local/bin folder...."
 	mkdir -p -m 775 /usr/local/bin
-	echo "Created /usr/local/bin...."
+	export PATH=$PATH:/usr/local/bin
+	echo "Created /usr/local/bin and added it to PATH...."
 fi
 
 #
