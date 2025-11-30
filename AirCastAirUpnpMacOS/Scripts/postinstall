@@ -1,20 +1,22 @@
 #!/bin/sh
 ## postinstall
+##
+## https://github.com/philippe44/AirConnect
+##
+## Downloads latest release zip, extracts, and installs correct executables for macOS
 
 pathToScript=$0
 pathToPackage=$1
 targetLocation=$2
 targetVolume=$3
 
-
-#!/bin/sh
-## postflight
-##
-## https://github.com/philippe44/AirConnect
-##
-## Installs from: 
-## https://github.com/philippe44/AirConnect/raw/master/bin/aircast-osx-multi
-## https://github.com/philippe44/AirConnect/raw/master/bin/airupnp-osx-multi
+# Configuration
+VERSION="1.9.3"
+GITHUB_REPO="philippe44/AirConnect"
+TMP_DIR="/private/var/tmp"
+ZIP_FILE="${TMP_DIR}/AirConnect-${VERSION}.zip"
+EXTRACT_DIR="${TMP_DIR}/AirConnect-${VERSION}"
+BIN_DIR="/usr/local/bin"
 
 function with_backoff {
   local max_attempts=${ATTEMPTS-5}
@@ -22,7 +24,7 @@ function with_backoff {
   local attempt=1
   local exitCode=0
 
-  while (( $attempt < $max_attempts ))
+  while [ $attempt -lt $max_attempts ]
   do
     if "$@"
     then
@@ -37,7 +39,7 @@ function with_backoff {
     timeout=$(( timeout * 2 ))
   done
 
-  if [[ $exitCode != 0 ]]
+  if [ $exitCode != 0 ]
   then
     echo "You've failed me for the last time! ($@)" 1>&2
   fi
@@ -51,80 +53,151 @@ function with_backoff {
 loggedInUser=$(/bin/ls -l /dev/console | /usr/bin/awk '{ print $3 }')
 
 #
-# Stop services if exist (without check)
+# Stop services if they exist (handle both old and new naming)
 #
-echo "Quietly stopping service if loaded...."
-sudo -u $loggedInUser launchctl unload -w /Library/LaunchAgents/com.aircast-osx-multi.plist
-sudo -u $loggedInUser launchctl unload -w /Library/LaunchAgents/com.airupnp-osx-multi.plist
-echo "Stopped service if loaded."
+echo "Stopping services if loaded...."
+sudo -u "$loggedInUser" launchctl unload -w /Library/LaunchAgents/com.aircast.plist 2>/dev/null
+sudo -u "$loggedInUser" launchctl unload -w /Library/LaunchAgents/com.airupnp.plist 2>/dev/null
+# Also unload old naming for upgrades
+sudo -u "$loggedInUser" launchctl unload -w /Library/LaunchAgents/com.aircast-osx-multi.plist 2>/dev/null
+sudo -u "$loggedInUser" launchctl unload -w /Library/LaunchAgents/com.airupnp-osx-multi.plist 2>/dev/null
+echo "Services stopped (if they were running)."
 
 #
-# Get latest executables
+# Detect macOS architecture
 #
-echo "Attempting to download latest executables from GitHub to tmp...."
-
-cd /private/var/tmp 
-aircasturl="https://github.com/philippe44/AirConnect/raw/master/bin/aircast-osx-multi"
-airupnpurl="https://github.com/philippe44/AirConnect/raw/master/bin/airupnp-osx-multi"
-( with_backoff curl -L -O $aircasturl &&  with_backoff curl -L -O $airupnpurl)
-
-
-#
-# make /usr/local/bin if not already there
-#
-echo "Checking for /usr/local/bin folder and creating if not found...."
-if [ ! -d "/usr/local/bin" ] 
-then
-	echo "Folder not found. Creating /usr/local/bin folder...."
-	mkdir -p -m 775 /usr/local/bin
-	export PATH=$PATH:/usr/local/bin
-	echo "Created /usr/local/bin and added it to PATH...."
+ARCH=$(uname -m)
+if [ "$ARCH" = "arm64" ]; then
+    AIRCAST_EXE="aircast-macos-arm64"
+    AIRUPNP_EXE="airupnp-macos-arm64"
+    echo "Detected Apple Silicon (ARM64) architecture."
+elif [ "$ARCH" = "x86_64" ]; then
+    AIRCAST_EXE="aircast-macos-x86_64"
+    AIRUPNP_EXE="airupnp-macos-x86_64"
+    echo "Detected Intel (x86_64) architecture."
+else
+    # Fallback to universal macOS binary
+    AIRCAST_EXE="aircast-macos"
+    AIRUPNP_EXE="airupnp-macos"
+    echo "Detected unknown architecture ($ARCH), using universal macOS binary."
 fi
 
 #
-# Copying downloaded executables to /usr/local/bin if they downloaded ok.
+# Create /usr/local/bin if it doesn't exist
 #
-if [ -f "/private/var/tmp/aircast-osx-multi" ] 
-then
-	echo "Copying downloaded executables to /usr/local/bin folder...."
-	cp /private/var/tmp/aircast-osx-multi /usr/local/bin 
-	cp /private/var/tmp/aircast-osx-multi /usr/local/bin 
-	echo "Copied downloaded executables to /usr/local/bin folder."
+echo "Checking for ${BIN_DIR} folder..."
+if [ ! -d "$BIN_DIR" ]; then
+    echo "Creating ${BIN_DIR} folder..."
+    mkdir -p -m 775 "$BIN_DIR"
+    export PATH=$PATH:"$BIN_DIR"
+    echo "Created ${BIN_DIR} and added it to PATH."
 fi
 
 #
-# Set executables to executable
+# Download latest release zip
 #
-echo "Setting executables to executable...."
-/bin/chmod +x "/usr/local/bin/aircast-osx-multi"
-/bin/chmod +x "/usr/local/bin/airupnp-osx-multi"
-echo "Done."
+echo "Downloading AirConnect ${VERSION} from GitHub releases..."
+ZIP_URL="https://github.com/${GITHUB_REPO}/archive/refs/tags/${VERSION}.zip"
 
-#
-# Create log files and set permissions.
-#
-if [ ! -f "/var/log/aircast.log" ] 
-then
-	touch /var/log/aircast.log
-	touch /var/log/airupnp.log
-	chmod 755 /var/log/aircast.log
-	chmod 755 /var/log/airupnp.log
+cd "$TMP_DIR" || exit 1
+
+# Clean up any existing download/extraction
+rm -f "$ZIP_FILE"
+rm -rf "$EXTRACT_DIR"
+
+if ! with_backoff curl -L -o "$ZIP_FILE" "$ZIP_URL"; then
+    echo "ERROR: Failed to download AirConnect release zip." 1>&2
+    exit 1
 fi
 
-echo "START OF NEW INSTALL LOG" >> /var/log/aircast.log
-echo "START OF NEW INSTALL LOG" >> /var/log/airupnp.log
+echo "Download complete."
+
+#
+# Extract the zip file
+#
+echo "Extracting AirConnect ${VERSION}..."
+if ! unzip -q "$ZIP_FILE" -d "$TMP_DIR"; then
+    echo "ERROR: Failed to extract zip file." 1>&2
+    rm -f "$ZIP_FILE"
+    exit 1
+fi
+
+echo "Extraction complete."
+
+#
+# Verify executables exist and copy them
+#
+AIRCAST_SRC="${EXTRACT_DIR}/${AIRCAST_EXE}"
+AIRUPNP_SRC="${EXTRACT_DIR}/${AIRUPNP_EXE}"
+
+if [ ! -f "$AIRCAST_SRC" ]; then
+    echo "ERROR: Executable not found: ${AIRCAST_SRC}" 1>&2
+    rm -f "$ZIP_FILE"
+    rm -rf "$EXTRACT_DIR"
+    exit 1
+fi
+
+if [ ! -f "$AIRUPNP_SRC" ]; then
+    echo "ERROR: Executable not found: ${AIRUPNP_SRC}" 1>&2
+    rm -f "$ZIP_FILE"
+    rm -rf "$EXTRACT_DIR"
+    exit 1
+fi
+
+echo "Copying executables to ${BIN_DIR}..."
+cp "$AIRCAST_SRC" "${BIN_DIR}/aircast"
+cp "$AIRUPNP_SRC" "${BIN_DIR}/airupnp"
+
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to copy executables." 1>&2
+    rm -f "$ZIP_FILE"
+    rm -rf "$EXTRACT_DIR"
+    exit 1
+fi
+
+echo "Executables copied successfully."
+
+#
+# Set executable permissions
+#
+echo "Setting executable permissions..."
+/bin/chmod +x "${BIN_DIR}/aircast"
+/bin/chmod +x "${BIN_DIR}/airupnp"
+echo "Permissions set."
+
+#
+# Clean up downloaded files
+#
+echo "Cleaning up temporary files..."
+rm -f "$ZIP_FILE"
+rm -rf "$EXTRACT_DIR"
+echo "Cleanup complete."
+
+#
+# Create log files and set permissions
+#
+echo "Setting up log files..."
+if [ ! -f "/var/log/aircast.log" ]; then
+    touch /var/log/aircast.log
+    chmod 755 /var/log/aircast.log
+fi
+
+if [ ! -f "/var/log/airupnp.log" ]; then
+    touch /var/log/airupnp.log
+    chmod 755 /var/log/airupnp.log
+fi
+
+echo "START OF NEW INSTALL LOG - $(date)" >> /var/log/aircast.log
+echo "START OF NEW INSTALL LOG - $(date)" >> /var/log/airupnp.log
 
 #
 # Start services
 #
-sudo -u $loggedInUser launchctl load -w /Library/LaunchAgents/com.aircast-osx-multi.plist
-sudo -u $loggedInUser launchctl load -w /Library/LaunchAgents/com.airupnp-osx-multi.plist
+echo "Starting services..."
+sudo -u "$loggedInUser" launchctl load -w /Library/LaunchAgents/com.aircast.plist
+sudo -u "$loggedInUser" launchctl load -w /Library/LaunchAgents/com.airupnp.plist
+echo "Services started."
 
-#
-# Check for permission to run exe in Security SIP and "allow" ?
-#
-#open -b com.apple.systempreferences /System/Library/PreferencePanes/Security.prefPane
-#open x-apple.systempreferences:com.apple.preference.security?General
+echo "Installation complete!"
 
-exit 0		## Success
-exit 1		## Failure
+exit 0
