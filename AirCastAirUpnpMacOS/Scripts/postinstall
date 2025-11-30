@@ -11,11 +11,10 @@ targetLocation=$2
 targetVolume=$3
 
 # Configuration
-VERSION="1.9.3"
+FALLBACK_VERSION="1.9.3"  # Used if GitHub API is unavailable
 GITHUB_REPO="philippe44/AirConnect"
+GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 TMP_DIR="/private/var/tmp"
-ZIP_FILE="${TMP_DIR}/AirConnect-${VERSION}.zip"
-EXTRACT_DIR="${TMP_DIR}/AirConnect-${VERSION}"
 BIN_DIR="/usr/local/bin"
 
 function with_backoff {
@@ -45,6 +44,29 @@ function with_backoff {
   fi
 
   return $exitCode
+}
+
+#
+# Get latest version from GitHub releases
+#
+function get_latest_version() {
+    echo "Checking for latest AirConnect version..."
+    
+    # Try to get latest release tag from GitHub API
+    LATEST_VERSION=$(curl -sL "$GITHUB_API" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | head -n 1)
+    
+    # Remove 'v' prefix if present (e.g., "v1.9.3" -> "1.9.3")
+    LATEST_VERSION=${LATEST_VERSION#v}
+    
+    if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "null" ]; then
+        echo "Warning: Could not determine latest version from GitHub API." 1>&2
+        echo "Using fallback version: ${FALLBACK_VERSION}" 1>&2
+        LATEST_VERSION="$FALLBACK_VERSION"
+    else
+        echo "Found latest version: ${LATEST_VERSION}"
+    fi
+    
+    echo "$LATEST_VERSION"
 }
 
 #
@@ -92,6 +114,13 @@ if [ ! -d "$BIN_DIR" ]; then
     export PATH=$PATH:"$BIN_DIR"
     echo "Created ${BIN_DIR} and added it to PATH."
 fi
+
+#
+# Get latest version and set up paths
+#
+VERSION=$(get_latest_version)
+ZIP_FILE="${TMP_DIR}/AirConnect-${VERSION}.zip"
+EXTRACT_DIR="${TMP_DIR}/AirConnect-${VERSION}"
 
 #
 # Download latest release zip
