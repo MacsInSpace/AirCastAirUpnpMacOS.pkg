@@ -291,22 +291,40 @@ function main() {
     echo_info "Extraction complete."
     
     #
+    # Find the actual extracted directory (GitHub zip might have different naming)
+    #
+    EXTRACTED_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d -name "AirConnect-*" | head -n 1)
+    if [ -z "$EXTRACTED_DIR" ]; then
+        echo_error "Could not find extracted AirConnect directory in $TMP_DIR"
+        echo_info "Contents of $TMP_DIR:"
+        ls -la "$TMP_DIR" | head -20
+        rm -f "$ZIP_FILE"
+        exit 1
+    fi
+    
+    echo_info "Found extracted directory: $EXTRACTED_DIR"
+    
+    #
     # Verify executables exist and copy them
     #
-    AIRCAST_SRC="${EXTRACT_DIR}/${AIRCAST_EXE}"
-    AIRUPNP_SRC="${EXTRACT_DIR}/${AIRUPNP_EXE}"
+    AIRCAST_SRC="${EXTRACTED_DIR}/${AIRCAST_EXE}"
+    AIRUPNP_SRC="${EXTRACTED_DIR}/${AIRUPNP_EXE}"
     
     if [ ! -f "$AIRCAST_SRC" ]; then
         echo_error "Executable not found: ${AIRCAST_SRC}"
+        echo_info "Available files in extracted directory:"
+        ls -la "$EXTRACTED_DIR" | grep -E "(aircast|airupnp)" | head -20
         rm -f "$ZIP_FILE"
-        rm -rf "$EXTRACT_DIR"
+        rm -rf "$EXTRACTED_DIR"
         exit 1
     fi
     
     if [ ! -f "$AIRUPNP_SRC" ]; then
         echo_error "Executable not found: ${AIRUPNP_SRC}"
+        echo_info "Available files in extracted directory:"
+        ls -la "$EXTRACTED_DIR" | grep -E "(aircast|airupnp)" | head -20
         rm -f "$ZIP_FILE"
-        rm -rf "$EXTRACT_DIR"
+        rm -rf "$EXTRACTED_DIR"
         exit 1
     fi
     
@@ -317,7 +335,7 @@ function main() {
     if [ $? -ne 0 ]; then
         echo_error "Failed to copy executables."
         rm -f "$ZIP_FILE"
-        rm -rf "$EXTRACT_DIR"
+        rm -rf "$EXTRACTED_DIR"
         exit 1
     fi
     
@@ -336,7 +354,7 @@ function main() {
     #
     echo_info "Cleaning up temporary files..."
     rm -f "$ZIP_FILE"
-    rm -rf "$EXTRACT_DIR"
+    rm -rf "$EXTRACTED_DIR"
     echo_info "Cleanup complete."
     
     #
@@ -380,4 +398,5 @@ function main() {
 main
 
 exit 0
+
 
