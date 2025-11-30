@@ -1,14 +1,19 @@
 #!/bin/sh
-## postinstall
 ##
+## AirConnect Installer for macOS
 ## https://github.com/philippe44/AirConnect
 ##
-## Downloads latest release zip, extracts, and installs correct executables for macOS
+## Standalone installer that downloads latest release and sets up launchd services
+##
+## Usage: sudo bash install-airconnect.sh
+##
+## run direct with 
+## bash <(curl -sL https://raw.githubusercontent.com/MacsInSpace/AirCastAirUpnpMacOS.pkg/main/AirCastAirUpnpMacOS/Scripts/postinstall)
+## or 
+## curl -sL https://raw.githubusercontent.com/MacsInSpace/AirCastAirUpnpMacOS.pkg/main/AirCastAirUpnpMacOS/Scripts/postinstall | bash
 
-pathToScript=$0
-pathToPackage=$1
-targetLocation=$2
-targetVolume=$3
+
+set -e  # Exit on error
 
 # Configuration
 FALLBACK_VERSION="1.9.3"  # Used if GitHub API is unavailable
@@ -16,6 +21,25 @@ GITHUB_REPO="philippe44/AirConnect"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 TMP_DIR="/private/var/tmp"
 BIN_DIR="/usr/local/bin"
+LAUNCH_AGENTS_DIR="/Library/LaunchAgents"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+function echo_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+function echo_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+function echo_error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+}
 
 function with_backoff {
   local max_attempts=${ATTEMPTS-5}
@@ -32,7 +56,7 @@ function with_backoff {
       exitCode=$?
     fi
 
-    echo "Failure! Retrying in $timeout.." 1>&2
+    echo_warn "Retrying in $timeout seconds.."
     sleep $timeout
     attempt=$(( attempt + 1 ))
     timeout=$(( timeout * 2 ))
@@ -40,7 +64,7 @@ function with_backoff {
 
   if [ $exitCode != 0 ]
   then
-    echo "You've failed me for the last time! ($@)" 1>&2
+    echo_error "Failed after $max_attempts attempts: $@"
   fi
 
   return $exitCode
@@ -50,7 +74,7 @@ function with_backoff {
 # Get latest version from GitHub releases
 #
 function get_latest_version() {
-    echo "Checking for latest AirConnect version..."
+    echo_info "Checking for latest AirConnect version..."
     
     # Try to get latest release tag from GitHub API
     LATEST_VERSION=$(curl -sL "$GITHUB_API" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | head -n 1)
@@ -59,174 +83,303 @@ function get_latest_version() {
     LATEST_VERSION=${LATEST_VERSION#v}
     
     if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "null" ]; then
-        echo "Warning: Could not determine latest version from GitHub API." 1>&2
-        echo "Using fallback version: ${FALLBACK_VERSION}" 1>&2
+        echo_warn "Could not determine latest version from GitHub API."
+        echo_info "Using fallback version: ${FALLBACK_VERSION}"
         LATEST_VERSION="$FALLBACK_VERSION"
     else
-        echo "Found latest version: ${LATEST_VERSION}"
+        echo_info "Found latest version: ${LATEST_VERSION}"
     fi
     
     echo "$LATEST_VERSION"
 }
 
 #
-# Get current logged in user
+# Check if running as root
 #
-loggedInUser=$(/bin/ls -l /dev/console | /usr/bin/awk '{ print $3 }')
+function check_root() {
+    if [ "$(id -u)" != "0" ]; then
+        echo_error "This script must be run as root (use sudo)"
+        exit 1
+    fi
+}
 
 #
-# Stop services if they exist (handle both old and new naming)
+# Get current logged in user and UID
 #
-echo "Stopping services if loaded...."
-sudo -u "$loggedInUser" launchctl unload -w /Library/LaunchAgents/com.aircast.plist 2>/dev/null
-sudo -u "$loggedInUser" launchctl unload -w /Library/LaunchAgents/com.airupnp.plist 2>/dev/null
-# Also unload old naming for upgrades
-sudo -u "$loggedInUser" launchctl unload -w /Library/LaunchAgents/com.aircast-osx-multi.plist 2>/dev/null
-sudo -u "$loggedInUser" launchctl unload -w /Library/LaunchAgents/com.airupnp-osx-multi.plist 2>/dev/null
-echo "Services stopped (if they were running)."
+function get_logged_in_user() {
+    local user=$(/bin/ls -l /dev/console | /usr/bin/awk '{ print $3 }')
+    if [ -z "$user" ]; then
+        echo_warn "Could not determine logged in user, using 'root'"
+        echo "root"
+    else
+        echo "$user"
+    fi
+}
+
+function get_user_uid() {
+    local user=$1
+    local uid=$(id -u "$user" 2>/dev/null)
+    if [ -z "$uid" ]; then
+        echo_warn "Could not determine UID for user $user, using 0"
+        echo "0"
+    else
+        echo "$uid"
+    fi
+}
 
 #
-# Detect macOS architecture
+# Create launchd plist files
 #
-ARCH=$(uname -m)
-if [ "$ARCH" = "arm64" ]; then
-    AIRCAST_EXE="aircast-macos-arm64"
-    AIRUPNP_EXE="airupnp-macos-arm64"
-    echo "Detected Apple Silicon (ARM64) architecture."
-elif [ "$ARCH" = "x86_64" ]; then
-    AIRCAST_EXE="aircast-macos-x86_64"
-    AIRUPNP_EXE="airupnp-macos-x86_64"
-    echo "Detected Intel (x86_64) architecture."
-else
-    # Fallback to universal macOS binary
-    AIRCAST_EXE="aircast-macos"
-    AIRUPNP_EXE="airupnp-macos"
-    echo "Detected unknown architecture ($ARCH), using universal macOS binary."
-fi
+function create_plist_files() {
+    local user=$1
+    
+    echo_info "Creating launchd plist files..."
+    
+    # Create LaunchAgents directory if it doesn't exist
+    if [ ! -d "$LAUNCH_AGENTS_DIR" ]; then
+        mkdir -p "$LAUNCH_AGENTS_DIR"
+        echo_info "Created $LAUNCH_AGENTS_DIR"
+    fi
+    
+    # Create com.aircast.plist
+    cat > "$LAUNCH_AGENTS_DIR/com.aircast.plist" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.aircast.plist</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/aircast</string>
+		<string>-Z</string>
+		<string>-f</string>
+		<string>/var/log/aircast.log</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+</dict>
+</plist>
+EOF
+    
+    # Create com.airupnp.plist
+    cat > "$LAUNCH_AGENTS_DIR/com.airupnp.plist" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.airupnp.plist</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/airupnp</string>
+		<string>-Z</string>
+		<string>-f</string>
+		<string>/var/log/airupnp.log</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+</dict>
+</plist>
+EOF
+    
+    # Set proper ownership
+    chown root:wheel "$LAUNCH_AGENTS_DIR/com.aircast.plist"
+    chown root:wheel "$LAUNCH_AGENTS_DIR/com.airupnp.plist"
+    chmod 644 "$LAUNCH_AGENTS_DIR/com.aircast.plist"
+    chmod 644 "$LAUNCH_AGENTS_DIR/com.airupnp.plist"
+    
+    echo_info "Plist files created successfully"
+}
 
 #
-# Create /usr/local/bin if it doesn't exist
+# Main installation process
 #
-echo "Checking for ${BIN_DIR} folder..."
-if [ ! -d "$BIN_DIR" ]; then
-    echo "Creating ${BIN_DIR} folder..."
-    mkdir -p -m 775 "$BIN_DIR"
-    export PATH=$PATH:"$BIN_DIR"
-    echo "Created ${BIN_DIR} and added it to PATH."
-fi
-
-#
-# Get latest version and set up paths
-#
-VERSION=$(get_latest_version)
-ZIP_FILE="${TMP_DIR}/AirConnect-${VERSION}.zip"
-EXTRACT_DIR="${TMP_DIR}/AirConnect-${VERSION}"
-
-#
-# Download latest release zip
-#
-echo "Downloading AirConnect ${VERSION} from GitHub releases..."
-ZIP_URL="https://github.com/${GITHUB_REPO}/archive/refs/tags/${VERSION}.zip"
-
-cd "$TMP_DIR" || exit 1
-
-# Clean up any existing download/extraction
-rm -f "$ZIP_FILE"
-rm -rf "$EXTRACT_DIR"
-
-if ! with_backoff curl -L -o "$ZIP_FILE" "$ZIP_URL"; then
-    echo "ERROR: Failed to download AirConnect release zip." 1>&2
-    exit 1
-fi
-
-echo "Download complete."
-
-#
-# Extract the zip file
-#
-echo "Extracting AirConnect ${VERSION}..."
-if ! unzip -q "$ZIP_FILE" -d "$TMP_DIR"; then
-    echo "ERROR: Failed to extract zip file." 1>&2
-    rm -f "$ZIP_FILE"
-    exit 1
-fi
-
-echo "Extraction complete."
-
-#
-# Verify executables exist and copy them
-#
-AIRCAST_SRC="${EXTRACT_DIR}/${AIRCAST_EXE}"
-AIRUPNP_SRC="${EXTRACT_DIR}/${AIRUPNP_EXE}"
-
-if [ ! -f "$AIRCAST_SRC" ]; then
-    echo "ERROR: Executable not found: ${AIRCAST_SRC}" 1>&2
+function main() {
+    echo_info "AirConnect Installer for macOS"
+    echo_info "=============================="
+    echo ""
+    
+    # Check if running as root
+    check_root
+    
+    # Get logged in user and UID
+    loggedInUser=$(get_logged_in_user)
+    userUID=$(get_user_uid "$loggedInUser")
+    echo_info "Detected user: $loggedInUser (UID: $userUID)"
+    
+    #
+    # Stop services if they exist (handle both old and new naming)
+    #
+    echo_info "Stopping services if loaded..."
+    # Use new launchctl bootout command
+    sudo -u "$loggedInUser" launchctl bootout "gui/$userUID/com.aircast.plist" 2>/dev/null || true
+    sudo -u "$loggedInUser" launchctl bootout "gui/$userUID/com.airupnp.plist" 2>/dev/null || true
+    # Also bootout old naming for upgrades
+    sudo -u "$loggedInUser" launchctl bootout "gui/$userUID/com.aircast-osx-multi.plist" 2>/dev/null || true
+    sudo -u "$loggedInUser" launchctl bootout "gui/$userUID/com.airupnp-osx-multi.plist" 2>/dev/null || true
+    echo_info "Services stopped (if they were running)."
+    
+    #
+    # Detect macOS architecture
+    #
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "arm64" ]; then
+        AIRCAST_EXE="aircast-macos-arm64"
+        AIRUPNP_EXE="airupnp-macos-arm64"
+        echo_info "Detected Apple Silicon (ARM64) architecture."
+    elif [ "$ARCH" = "x86_64" ]; then
+        AIRCAST_EXE="aircast-macos-x86_64"
+        AIRUPNP_EXE="airupnp-macos-x86_64"
+        echo_info "Detected Intel (x86_64) architecture."
+    else
+        # Fallback to universal macOS binary
+        AIRCAST_EXE="aircast-macos"
+        AIRUPNP_EXE="airupnp-macos"
+        echo_warn "Detected unknown architecture ($ARCH), using universal macOS binary."
+    fi
+    
+    #
+    # Create /usr/local/bin if it doesn't exist
+    #
+    echo_info "Checking for ${BIN_DIR} folder..."
+    if [ ! -d "$BIN_DIR" ]; then
+        echo_info "Creating ${BIN_DIR} folder..."
+        mkdir -p -m 775 "$BIN_DIR"
+        export PATH=$PATH:"$BIN_DIR"
+        echo_info "Created ${BIN_DIR} and added it to PATH."
+    fi
+    
+    #
+    # Get latest version and set up paths
+    #
+    VERSION=$(get_latest_version)
+    ZIP_FILE="${TMP_DIR}/AirConnect-${VERSION}.zip"
+    EXTRACT_DIR="${TMP_DIR}/AirConnect-${VERSION}"
+    
+    #
+    # Download latest release zip
+    #
+    echo_info "Downloading AirConnect ${VERSION} from GitHub releases..."
+    ZIP_URL="https://github.com/${GITHUB_REPO}/archive/refs/tags/${VERSION}.zip"
+    
+    cd "$TMP_DIR" || exit 1
+    
+    # Clean up any existing download/extraction
     rm -f "$ZIP_FILE"
     rm -rf "$EXTRACT_DIR"
-    exit 1
-fi
-
-if [ ! -f "$AIRUPNP_SRC" ]; then
-    echo "ERROR: Executable not found: ${AIRUPNP_SRC}" 1>&2
+    
+    if ! with_backoff curl -L -o "$ZIP_FILE" "$ZIP_URL"; then
+        echo_error "Failed to download AirConnect release zip."
+        exit 1
+    fi
+    
+    echo_info "Download complete."
+    
+    #
+    # Extract the zip file
+    #
+    echo_info "Extracting AirConnect ${VERSION}..."
+    if ! unzip -q "$ZIP_FILE" -d "$TMP_DIR"; then
+        echo_error "Failed to extract zip file."
+        rm -f "$ZIP_FILE"
+        exit 1
+    fi
+    
+    echo_info "Extraction complete."
+    
+    #
+    # Verify executables exist and copy them
+    #
+    AIRCAST_SRC="${EXTRACT_DIR}/${AIRCAST_EXE}"
+    AIRUPNP_SRC="${EXTRACT_DIR}/${AIRUPNP_EXE}"
+    
+    if [ ! -f "$AIRCAST_SRC" ]; then
+        echo_error "Executable not found: ${AIRCAST_SRC}"
+        rm -f "$ZIP_FILE"
+        rm -rf "$EXTRACT_DIR"
+        exit 1
+    fi
+    
+    if [ ! -f "$AIRUPNP_SRC" ]; then
+        echo_error "Executable not found: ${AIRUPNP_SRC}"
+        rm -f "$ZIP_FILE"
+        rm -rf "$EXTRACT_DIR"
+        exit 1
+    fi
+    
+    echo_info "Copying executables to ${BIN_DIR}..."
+    cp "$AIRCAST_SRC" "${BIN_DIR}/aircast"
+    cp "$AIRUPNP_SRC" "${BIN_DIR}/airupnp"
+    
+    if [ $? -ne 0 ]; then
+        echo_error "Failed to copy executables."
+        rm -f "$ZIP_FILE"
+        rm -rf "$EXTRACT_DIR"
+        exit 1
+    fi
+    
+    echo_info "Executables copied successfully."
+    
+    #
+    # Set executable permissions
+    #
+    echo_info "Setting executable permissions..."
+    /bin/chmod +x "${BIN_DIR}/aircast"
+    /bin/chmod +x "${BIN_DIR}/airupnp"
+    echo_info "Permissions set."
+    
+    #
+    # Clean up downloaded files
+    #
+    echo_info "Cleaning up temporary files..."
     rm -f "$ZIP_FILE"
     rm -rf "$EXTRACT_DIR"
-    exit 1
-fi
+    echo_info "Cleanup complete."
+    
+    #
+    # Create log files and set permissions
+    #
+    echo_info "Setting up log files..."
+    if [ ! -f "/var/log/aircast.log" ]; then
+        touch /var/log/aircast.log
+        chmod 755 /var/log/aircast.log
+    fi
+    
+    if [ ! -f "/var/log/airupnp.log" ]; then
+        touch /var/log/airupnp.log
+        chmod 755 /var/log/airupnp.log
+    fi
+    
+    echo "START OF NEW INSTALL LOG - $(date)" >> /var/log/aircast.log
+    echo "START OF NEW INSTALL LOG - $(date)" >> /var/log/airupnp.log
+    
+    #
+    # Create plist files
+    #
+    create_plist_files "$loggedInUser"
+    
+    #
+    # Start services
+    #
+    echo_info "Starting services..."
+    # Use new launchctl bootstrap command
+    sudo -u "$loggedInUser" launchctl bootstrap "gui/$userUID" "$LAUNCH_AGENTS_DIR/com.aircast.plist" 2>/dev/null || true
+    sudo -u "$loggedInUser" launchctl bootstrap "gui/$userUID" "$LAUNCH_AGENTS_DIR/com.airupnp.plist" 2>/dev/null || true
+    echo_info "Services started."
+    
+    echo ""
+    echo_info "Installation complete!"
+    echo_info "AirConnect version ${VERSION} has been installed and started."
+    echo_info "Logs are available at: /var/log/aircast.log and /var/log/airupnp.log"
+}
 
-echo "Copying executables to ${BIN_DIR}..."
-cp "$AIRCAST_SRC" "${BIN_DIR}/aircast"
-cp "$AIRUPNP_SRC" "${BIN_DIR}/airupnp"
-
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to copy executables." 1>&2
-    rm -f "$ZIP_FILE"
-    rm -rf "$EXTRACT_DIR"
-    exit 1
-fi
-
-echo "Executables copied successfully."
-
-#
-# Set executable permissions
-#
-echo "Setting executable permissions..."
-/bin/chmod +x "${BIN_DIR}/aircast"
-/bin/chmod +x "${BIN_DIR}/airupnp"
-echo "Permissions set."
-
-#
-# Clean up downloaded files
-#
-echo "Cleaning up temporary files..."
-rm -f "$ZIP_FILE"
-rm -rf "$EXTRACT_DIR"
-echo "Cleanup complete."
-
-#
-# Create log files and set permissions
-#
-echo "Setting up log files..."
-if [ ! -f "/var/log/aircast.log" ]; then
-    touch /var/log/aircast.log
-    chmod 755 /var/log/aircast.log
-fi
-
-if [ ! -f "/var/log/airupnp.log" ]; then
-    touch /var/log/airupnp.log
-    chmod 755 /var/log/airupnp.log
-fi
-
-echo "START OF NEW INSTALL LOG - $(date)" >> /var/log/aircast.log
-echo "START OF NEW INSTALL LOG - $(date)" >> /var/log/airupnp.log
-
-#
-# Start services
-#
-echo "Starting services..."
-sudo -u "$loggedInUser" launchctl load -w /Library/LaunchAgents/com.aircast.plist
-sudo -u "$loggedInUser" launchctl load -w /Library/LaunchAgents/com.airupnp.plist
-echo "Services started."
-
-echo "Installation complete!"
+# Run main function
+main
 
 exit 0
+
