@@ -9,7 +9,7 @@
 ##
 ## run direct with 
 ## curl -sL https://raw.githubusercontent.com/MacsInSpace/AirCastAirUpnpMacOS.pkg/main/AirCastAirUpnpMacOS/Scripts/postinstall | sudo bash
-#!/bin/sh
+
 
 set -e  # Exit on error
 
