@@ -10,14 +10,6 @@
 ## run direct with 
 ## curl -sL https://raw.githubusercontent.com/MacsInSpace/AirCastAirUpnpMacOS.pkg/main/AirCastAirUpnpMacOS/Scripts/postinstall | sudo bash
 #!/bin/sh
-##
-## AirConnect Installer for macOS
-## https://github.com/philippe44/AirConnect
-##
-## Standalone installer that downloads latest release and sets up launchd services
-##
-## Usage: sudo bash install-airconnect.sh
-##
 
 set -e  # Exit on error
 
