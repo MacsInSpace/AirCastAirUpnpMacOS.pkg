@@ -292,7 +292,7 @@ function main() {
     # Clean up any existing download/extraction
     rm -f "$ZIP_FILE"
     rm -rf "$EXTRACT_DIR"
-    rm -rf "$TMP_DIR"
+    rm -rf "$TMP_DIR/*"
 
     if ! with_backoff curl -L -o "$ZIP_FILE" "$ZIP_URL"; then
         echo_error "Failed to download AirConnect release zip."
