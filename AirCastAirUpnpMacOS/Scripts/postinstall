@@ -10,7 +10,6 @@
 ## run direct with 
 ## curl -sL https://raw.githubusercontent.com/MacsInSpace/AirCastAirUpnpMacOS.pkg/main/AirCastAirUpnpMacOS/Scripts/postinstall | sudo bash
 
-
 set -e  # Exit on error
 
 # Configuration
@@ -334,27 +333,32 @@ function main() {
     
     # If no AirConnect-* directory found, check if executables are directly in tmp (from release zip)
     if [ -z "$EXTRACTED_DIR" ]; then
-        # Check if executables are directly in TMP_DIR (release zip structure)
-        if [ -f "$TMP_DIR/aircast-macos-arm64" ] || [ -f "$TMP_DIR/aircast-macos-x86_64" ] || [ -f "$TMP_DIR/aircast-macos" ] || \
-           [ -f "$TMP_DIR/airupnp-macos-arm64" ] || [ -f "$TMP_DIR/airupnp-macos-x86_64" ] || [ -f "$TMP_DIR/airupnp-macos" ]; then
+        # Check if any macOS executables exist directly in TMP_DIR (release zip structure)
+        # Use find to search for the specific executables we need
+        MACOS_AIRCAST=$(find "$TMP_DIR" -maxdepth 1 -type f -name "$AIRCAST_EXE" | head -n 1)
+        MACOS_AIRUPNP=$(find "$TMP_DIR" -maxdepth 1 -type f -name "$AIRUPNP_EXE" | head -n 1)
+        
+        if [ -n "$MACOS_AIRCAST" ] || [ -n "$MACOS_AIRUPNP" ]; then
             EXTRACTED_DIR="$TMP_DIR"
             echo_info "Executables found directly in temp directory (release zip structure)"
         else
-            echo_error "Could not find extracted AirConnect directory or executables in $TMP_DIR"
-            echo_info "Contents of $TMP_DIR:"
-            ls -la "$TMP_DIR" | grep -E "(aircast|airupnp)" | head -20
-            rm -f "$ZIP_FILE"
-            exit 1
+            # Check for any macOS executables as fallback
+            if find "$TMP_DIR" -maxdepth 1 -type f \( -name "aircast-macos*" -o -name "airupnp-macos*" \) | grep -q .; then
+                EXTRACTED_DIR="$TMP_DIR"
+                echo_info "Executables found directly in temp directory (release zip structure)"
+            else
+                echo_error "Could not find extracted AirConnect directory or macOS executables in $TMP_DIR"
+                echo_info "Looking for: $AIRCAST_EXE and $AIRUPNP_EXE"
+                echo_info "Contents of $TMP_DIR (showing aircast/airupnp files only):"
+                ls -la "$TMP_DIR" | grep -E "(aircast|airupnp)" | head -30
+                echo_info "Total files in $TMP_DIR:"
+                ls -1 "$TMP_DIR" | wc -l
+                rm -f "$ZIP_FILE"
+                exit 1
+            fi
         fi
     else
         echo_info "Found extracted directory: $EXTRACTED_DIR"
-    fi
-    if [ -z "$EXTRACTED_DIR" ]; then
-        echo_error "Could not find extracted AirConnect directory in $TMP_DIR"
-        echo_info "Contents of $TMP_DIR:"
-        ls -la "$TMP_DIR" | head -20
-        rm -f "$ZIP_FILE"
-        exit 1
     fi
     
     echo_info "Found extracted directory: $EXTRACTED_DIR"
