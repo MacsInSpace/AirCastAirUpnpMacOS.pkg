@@ -68,27 +68,37 @@ function with_backoff {
 }
 
 #
-# Get latest version from GitHub releases
+# Get latest version and release zip URL from GitHub releases
 #
-function get_latest_version() {
+function get_latest_release_info() {
     echo_info "Checking for latest AirConnect version..." >&2
     
-    # Try to get latest release tag from GitHub API
-    LATEST_VERSION=$(curl -sL "$GITHUB_API" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | head -n 1)
+    # Get latest release info from GitHub API
+    RELEASE_JSON=$(curl -sL "$GITHUB_API")
     
-    # Remove 'v' prefix if present (e.g., "v1.9.3" -> "1.9.3")
+    # Extract version
+    LATEST_VERSION=$(echo "$RELEASE_JSON" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/' | head -n 1)
     LATEST_VERSION=${LATEST_VERSION#v}
+    
+    # Find the zip asset (look for browser_download_url ending in .zip)
+    RELEASE_ZIP_URL=$(echo "$RELEASE_JSON" | grep '"browser_download_url".*\.zip"' | sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' | head -n 1)
     
     if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" = "null" ]; then
         echo_warn "Could not determine latest version from GitHub API." >&2
         echo_info "Using fallback version: ${FALLBACK_VERSION}" >&2
         LATEST_VERSION="$FALLBACK_VERSION"
+        RELEASE_ZIP_URL=""
     else
         echo_info "Found latest version: ${LATEST_VERSION}" >&2
+        if [ -n "$RELEASE_ZIP_URL" ]; then
+            echo_info "Found release zip URL" >&2
+        else
+            echo_warn "No release zip asset found, will use source archive" >&2
+        fi
     fi
     
-    # Only output the version number to stdout (for capture)
-    echo "$LATEST_VERSION"
+    # Output version and URL (tab-separated for parsing)
+    echo "${LATEST_VERSION}	${RELEASE_ZIP_URL}"
 }
 
 #
@@ -253,9 +263,21 @@ function main() {
     fi
     
     #
-    # Get latest version and set up paths
+    # Get latest version and release zip URL
     #
-    VERSION=$(get_latest_version)
+    RELEASE_INFO=$(get_latest_release_info)
+    VERSION=$(echo "$RELEASE_INFO" | cut -f1)
+    RELEASE_ZIP_URL=$(echo "$RELEASE_INFO" | cut -f2)
+    
+    # If no release zip URL found, fall back to source archive
+    if [ -z "$RELEASE_ZIP_URL" ]; then
+        ZIP_URL="https://github.com/${GITHUB_REPO}/archive/refs/tags/${VERSION}.zip"
+        echo_info "Using source archive URL (no release assets found)"
+    else
+        ZIP_URL="$RELEASE_ZIP_URL"
+        echo_info "Using release assets URL"
+    fi
+    
     ZIP_FILE="${TMP_DIR}/AirConnect-${VERSION}.zip"
     EXTRACT_DIR="${TMP_DIR}/AirConnect-${VERSION}"
     
@@ -263,7 +285,6 @@ function main() {
     # Download latest release zip
     #
     echo_info "Downloading AirConnect ${VERSION} from GitHub releases..."
-    ZIP_URL="https://github.com/${GITHUB_REPO}/archive/refs/tags/${VERSION}.zip"
     
     cd "$TMP_DIR" || exit 1
     
@@ -284,7 +305,7 @@ function main() {
     echo_info "Extracting AirConnect ${VERSION}..."
     if ! unzip -q "$ZIP_FILE" -d "$TMP_DIR"; then
         echo_error "Failed to extract zip file."
-        #rm -f "$ZIP_FILE"
+        rm -f "$ZIP_FILE"
         exit 1
     fi
     
@@ -298,35 +319,44 @@ function main() {
         echo_error "Could not find extracted AirConnect directory in $TMP_DIR"
         echo_info "Contents of $TMP_DIR:"
         ls -la "$TMP_DIR" | head -20
-        #rm -f "$ZIP_FILE"
+        rm -f "$ZIP_FILE"
         exit 1
     fi
     
     echo_info "Found extracted directory: $EXTRACTED_DIR"
     
     #
-    # Verify executables exist and copy them
+    # Find executables (they may be in subdirectories)
     #
-    AIRCAST_SRC="${EXTRACTED_DIR}/${AIRCAST_EXE}"
-    AIRUPNP_SRC="${EXTRACTED_DIR}/${AIRUPNP_EXE}"
+    AIRCAST_SRC=$(find "$EXTRACTED_DIR" -type f -name "$AIRCAST_EXE" | head -n 1)
+    AIRUPNP_SRC=$(find "$EXTRACTED_DIR" -type f -name "$AIRUPNP_EXE" | head -n 1)
     
-    if [ ! -f "$AIRCAST_SRC" ]; then
-        echo_error "Executable not found: ${AIRCAST_SRC}"
+    if [ -z "$AIRCAST_SRC" ] || [ ! -f "$AIRCAST_SRC" ]; then
+        echo_error "Executable not found: ${AIRCAST_EXE}"
+        echo_info "Searching for executables in: $EXTRACTED_DIR"
         echo_info "Available files in extracted directory:"
-        ls -la "$EXTRACTED_DIR" | grep -E "(aircast|airupnp)" | head -20
-        #rm -f "$ZIP_FILE"
-        #rm -rf "$EXTRACTED_DIR"
+        ls -la "$EXTRACTED_DIR" | head -20
+        echo_info "Searching recursively for aircast files:"
+        find "$EXTRACTED_DIR" -type f -name "*aircast*" | head -10
+        rm -f "$ZIP_FILE"
+        rm -rf "$EXTRACTED_DIR"
         exit 1
     fi
     
-    if [ ! -f "$AIRUPNP_SRC" ]; then
-        echo_error "Executable not found: ${AIRUPNP_SRC}"
+    if [ -z "$AIRUPNP_SRC" ] || [ ! -f "$AIRUPNP_SRC" ]; then
+        echo_error "Executable not found: ${AIRUPNP_EXE}"
+        echo_info "Searching for executables in: $EXTRACTED_DIR"
         echo_info "Available files in extracted directory:"
-        ls -la "$EXTRACTED_DIR" | grep -E "(aircast|airupnp)" | head -20
-        #rm -f "$ZIP_FILE"
-        #rm -rf "$EXTRACTED_DIR"
+        ls -la "$EXTRACTED_DIR" | head -20
+        echo_info "Searching recursively for airupnp files:"
+        find "$EXTRACTED_DIR" -type f -name "*airupnp*" | head -10
+        rm -f "$ZIP_FILE"
+        rm -rf "$EXTRACTED_DIR"
         exit 1
     fi
+    
+    echo_info "Found aircast executable: $AIRCAST_SRC"
+    echo_info "Found airupnp executable: $AIRUPNP_SRC"
     
     echo_info "Copying executables to ${BIN_DIR}..."
     cp "$AIRCAST_SRC" "${BIN_DIR}/aircast"
@@ -334,8 +364,8 @@ function main() {
     
     if [ $? -ne 0 ]; then
         echo_error "Failed to copy executables."
-        #rm -f "$ZIP_FILE"
-        #rm -rf "$EXTRACTED_DIR"
+        rm -f "$ZIP_FILE"
+        rm -rf "$EXTRACTED_DIR"
         exit 1
     fi
     
@@ -353,8 +383,8 @@ function main() {
     # Clean up downloaded files
     #
     echo_info "Cleaning up temporary files..."
-    #rm -f "$ZIP_FILE"
-    #rm -rf "$EXTRACTED_DIR"
+    rm -f "$ZIP_FILE"
+    rm -rf "$EXTRACTED_DIR"
     echo_info "Cleanup complete."
     
     #
@@ -398,5 +428,4 @@ function main() {
 main
 
 exit 0
-
 
