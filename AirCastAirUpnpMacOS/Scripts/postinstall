@@ -285,6 +285,7 @@ function main() {
     # Download latest release zip
     #
     echo_info "Downloading AirConnect ${VERSION} from GitHub releases..."
+    echo_info "$ZIP_URL"
     
     cd "$TMP_DIR" || exit 1
     
