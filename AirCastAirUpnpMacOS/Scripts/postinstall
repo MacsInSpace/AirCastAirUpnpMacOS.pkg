@@ -16,8 +16,9 @@ set -e  # Exit on error
 FALLBACK_VERSION="1.9.3"  # Used if GitHub API is unavailable
 GITHUB_REPO="philippe44/AirConnect"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
-TMP_DIR="/tmp"
+TMP_DIR="/tmp/AirConnect"
 BIN_DIR="/usr/local/bin"
+AIRCONNECT_DIRECTORY="/usr/local/bin/AirConnect"
 LAUNCH_AGENTS_DIR="/Library/LaunchAgents"
 
 # Colors for output
@@ -134,6 +135,17 @@ function get_user_uid() {
         echo "$uid"
     fi
 }
+
+    #
+    # Create TMP_DIR if it doesn't exist
+    #
+    echo_info "Checking for ${TMP_DIR} folder..."
+    if [ ! -d "$TMP_DIR" ]; then
+        echo_info "Creating ${TMP_DIR} folder..."
+        mkdir -p -m 775 "$TMP_DIR"
+        echo_info "Created ${TMP_DIR}"
+    fi
+
 
 #
 # Create launchd plist files
@@ -261,7 +273,20 @@ function main() {
         export PATH=$PATH:"$BIN_DIR"
         echo_info "Created ${BIN_DIR} and added it to PATH."
     fi
-    
+
+    #
+    # Create /usr/local/bin/AIRCONNECT if it doesn't exist
+    #
+    echo_info "Checking for ${AIRCONNECT_DIRECTORY} folder..."
+    if [ ! -d "$AIRCONNECT_DIRECTORY" ]; then
+        echo_info "Creating ${BIN_DIR} folder..."
+        mkdir -p -m 775 "$AIRCONNECT_DIRECTORY"
+        echo_info "Created ${AIRCONNECT_DIRECTORY}"
+    fi
+
+
+
+
     #
     # Get latest version and release zip URL
     #
