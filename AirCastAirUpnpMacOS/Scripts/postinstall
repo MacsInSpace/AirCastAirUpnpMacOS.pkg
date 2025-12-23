@@ -237,17 +237,17 @@ function main() {
     #
     ARCH=$(uname -m)
     if [ "$ARCH" = "arm64" ]; then
-        AIRCAST_EXE="aircast-macos-arm64"
-        AIRUPNP_EXE="airupnp-macos-arm64"
+        AIRCAST_EXE="aircast-macos-arm64-static"
+        AIRUPNP_EXE="airupnp-macos-arm64-static"
         echo_info "Detected Apple Silicon (ARM64) architecture."
     elif [ "$ARCH" = "x86_64" ]; then
-        AIRCAST_EXE="aircast-macos-x86_64"
-        AIRUPNP_EXE="airupnp-macos-x86_64"
+        AIRCAST_EXE="aircast-macos-x86_64-static"
+        AIRUPNP_EXE="airupnp-macos-x86_64-static"
         echo_info "Detected Intel (x86_64) architecture."
     else
         # Fallback to universal macOS binary
-        AIRCAST_EXE="aircast-macos"
-        AIRUPNP_EXE="airupnp-macos"
+        AIRCAST_EXE="aircast-macos-static"
+        AIRUPNP_EXE="airupnp-macos-static"
         echo_warn "Detected unknown architecture ($ARCH), using universal macOS binary."
     fi
     
@@ -366,8 +366,8 @@ function main() {
     #
     # Find executables (they may be in subdirectories)
     #
-    AIRCAST_SRC=$(find "$EXTRACTED_DIR" -type f -name "${AIRCAST_EXE}-source" | head -n 1)
-    AIRUPNP_SRC=$(find "$EXTRACTED_DIR" -type f -name "${AIRUPNP_EXE}-source" | head -n 1)
+    AIRCAST_SRC=$(find "$EXTRACTED_DIR" -type f -name "$AIRCAST_EXE" | head -n 1)
+    AIRUPNP_SRC=$(find "$EXTRACTED_DIR" -type f -name "$AIRUPNP_EXE" | head -n 1)
     
     if [ -z "$AIRCAST_SRC" ] || [ ! -f "$AIRCAST_SRC" ]; then
         echo_error "Executable not found: ${AIRCAST_EXE}"
