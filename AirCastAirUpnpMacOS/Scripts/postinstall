@@ -18,7 +18,6 @@ GITHUB_REPO="philippe44/AirConnect"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
 TMP_DIR="/tmp/AirConnect"
 BIN_DIR="/usr/local/bin"
-AIRCONNECT_DIRECTORY="/usr/local/bin/AirConnect"
 LAUNCH_AGENTS_DIR="/Library/LaunchAgents"
 
 # Colors for output
@@ -273,19 +272,6 @@ function main() {
         export PATH=$PATH:"$BIN_DIR"
         echo_info "Created ${BIN_DIR} and added it to PATH."
     fi
-
-    #
-    # Create /usr/local/bin/AIRCONNECT if it doesn't exist
-    #
-    echo_info "Checking for ${AIRCONNECT_DIRECTORY} folder..."
-    if [ ! -d "$AIRCONNECT_DIRECTORY" ]; then
-        echo_info "Creating ${BIN_DIR} folder..."
-        mkdir -p -m 775 "$AIRCONNECT_DIRECTORY"
-        echo_info "Created ${AIRCONNECT_DIRECTORY}"
-    fi
-
-
-
 
     #
     # Get latest version and release zip URL
