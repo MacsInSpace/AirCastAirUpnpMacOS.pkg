@@ -16,7 +16,7 @@ set -e  # Exit on error
 FALLBACK_VERSION="1.9.3"  # Used if GitHub API is unavailable
 GITHUB_REPO="philippe44/AirConnect"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
-TMP_DIR="/private/var/tmp"
+TMP_DIR="/tmp"
 BIN_DIR="/usr/local/bin"
 LAUNCH_AGENTS_DIR="/Library/LaunchAgents"
 
