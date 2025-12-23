@@ -316,7 +316,7 @@ function main() {
     echo_info "Extracting AirConnect ${VERSION}..."
     if ! unzip -o -q "$ZIP_FILE" -d "$TMP_DIR"; then
         echo_error "Failed to extract zip file."
-        rm -f "$ZIP_FILE"
+		rm -rf "$TMP_DIR"
         exit 1
     fi
     
@@ -330,7 +330,7 @@ function main() {
         echo_info "Found nested zip file, extracting: $NESTED_ZIP"
         if ! unzip -o -q "$NESTED_ZIP" -d "$TMP_DIR"; then
             echo_error "Failed to extract nested zip file."
-            rm -f "$ZIP_FILE"
+			rm -rf "$TMP_DIR"
             exit 1
         fi
         echo_info "Nested zip extracted."
@@ -364,7 +364,7 @@ function main() {
                 ls -la "$TMP_DIR" | grep -E "(aircast|airupnp)" | head -30
                 echo_info "Total files in $TMP_DIR:"
                 ls -1 "$TMP_DIR" | wc -l
-                rm -f "$ZIP_FILE"
+				rm -rf "$TMP_DIR"
                 exit 1
             fi
         fi
@@ -387,8 +387,7 @@ function main() {
         ls -la "$EXTRACTED_DIR" | head -20
         echo_info "Searching recursively for aircast files:"
         find "$EXTRACTED_DIR" -type f -name "*aircast*" | head -10
-        rm -f "$ZIP_FILE"
-        rm -rf "$EXTRACTED_DIR"
+		rm -rf "$TMP_DIR"
         exit 1
     fi
     
@@ -399,8 +398,7 @@ function main() {
         ls -la "$EXTRACTED_DIR" | head -20
         echo_info "Searching recursively for airupnp files:"
         find "$EXTRACTED_DIR" -type f -name "*airupnp*" | head -10
-        rm -f "$ZIP_FILE"
-        rm -rf "$EXTRACTED_DIR"
+		rm -rf "$TMP_DIR"
         exit 1
     fi
     
@@ -413,8 +411,7 @@ function main() {
     
     if [ $? -ne 0 ]; then
         echo_error "Failed to copy executables."
-        rm -f "$ZIP_FILE"
-        rm -rf "$EXTRACTED_DIR"
+		rm -rf "$TMP_DIR"
         exit 1
     fi
     
@@ -432,9 +429,8 @@ function main() {
     # Clean up downloaded files
     #
     echo_info "Cleaning up temporary files..."
-    #rm -f "$ZIP_FILE"
-    #rm -rf "$EXTRACTED_DIR"
-    echo_info "Cleanup complete."
+	rm -rf "$TMP_DIR"
+	echo_info "Cleanup complete."
     
     #
     # Create log files and set permissions
