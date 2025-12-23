@@ -421,8 +421,8 @@ function main() {
     # Clean up downloaded files
     #
     echo_info "Cleaning up temporary files..."
-    rm -f "$ZIP_FILE"
-    rm -rf "$EXTRACTED_DIR"
+    #rm -f "$ZIP_FILE"
+    #rm -rf "$EXTRACTED_DIR"
     echo_info "Cleanup complete."
     
     #
