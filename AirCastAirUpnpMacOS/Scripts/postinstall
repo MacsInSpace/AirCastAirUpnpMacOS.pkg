@@ -366,8 +366,8 @@ function main() {
     #
     # Find executables (they may be in subdirectories)
     #
-    AIRCAST_SRC=$(find "$EXTRACTED_DIR" -type f -name "$AIRCAST_EXE" | head -n 1)
-    AIRUPNP_SRC=$(find "$EXTRACTED_DIR" -type f -name "$AIRUPNP_EXE" | head -n 1)
+    AIRCAST_SRC=$(find "$EXTRACTED_DIR" -type f -name "${AIRCAST_EXE}-source" | head -n 1)
+    AIRUPNP_SRC=$(find "$EXTRACTED_DIR" -type f -name "${AIRUPNP_EXE}-source" | head -n 1)
     
     if [ -z "$AIRCAST_SRC" ] || [ ! -f "$AIRCAST_SRC" ]; then
         echo_error "Executable not found: ${AIRCAST_EXE}"
